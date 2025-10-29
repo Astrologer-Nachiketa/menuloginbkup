@@ -528,6 +528,11 @@
             </div>
         </div>
 
+        <!-- Customization Modal for Add-ons -->
+        <div class="modal-overlay" id="customization-modal-overlay">
+            <div class="modal" id="customization-modal-content"></div>
+        </div>
+
         <!-- Cart Modal -->
         <div class="modal-overlay" id="cart-modal-overlay">
             <div class="modal">
@@ -1183,6 +1188,30 @@
             showEditDetailsButton(); // Show customer details and edit button
             document.getElementById('cart-modal-overlay').classList.add('visible');
         });
+        
+        // Modal overlay click handlers (close on overlay click)
+        document.getElementById('customization-modal-overlay').addEventListener('click', (e) => {
+            if (e.target === document.getElementById('customization-modal-overlay')) {
+                closeCustomizationModal();
+            }
+        });
+        document.getElementById('cart-modal-overlay').addEventListener('click', (e) => {
+            if (e.target === document.getElementById('cart-modal-overlay')) {
+                document.getElementById('cart-modal-overlay').classList.remove('visible');
+            }
+        });
+        document.getElementById('customer-details-modal').addEventListener('click', (e) => {
+            if (e.target === document.getElementById('customer-details-modal')) {
+                document.getElementById('customer-details-modal').classList.remove('visible');
+                pendingOrderSubmission = false;
+            }
+        });
+        document.getElementById('my-orders-modal').addEventListener('click', (e) => {
+            if (e.target === document.getElementById('my-orders-modal')) {
+                myOrdersModalOpen = false;
+                document.getElementById('my-orders-modal').classList.remove('visible');
+            }
+        });
 
         // CSV Parsing
         async function fetchAndParseCSV(url) {
@@ -1444,9 +1473,16 @@
                 btn.addEventListener('click', (e) => {
                     const itemName = e.target.dataset.itemName;
                     const item = menuItems.find(i => i.Name === itemName);
-                    cart.push({ ...item, quantity: 1, selectedAddons: [], instructions: '', subtotal: item.Price });
-                    updateCartSummary();
-                    renderItems(activeCategory);
+                    
+                    // Check if item has add-ons
+                    if (item.Addon_Group_Name) {
+                        openCustomizationModal(item);
+                    } else {
+                        // Simple item without add-ons
+                        cart.push({ ...item, quantity: 1, selectedAddons: [], instructions: '', subtotal: item.Price });
+                        updateCartSummary();
+                        renderItems(activeCategory);
+                    }
                 });
             });
 
@@ -1475,6 +1511,120 @@
                     }
                 });
             });
+        }
+        
+        function openCustomizationModal(item, cartIndex = null) {
+            currentItemForModal = item;
+            editingCartItemIndex = cartIndex;
+            const existingItem = (cartIndex !== null) ? cart[cartIndex] : null;
+            const relevantAddons = addons.filter(addon => addon.Addon_Group_Name === item.Addon_Group_Name);
+            
+            const addonGroups = {};
+            relevantAddons.forEach(addon => {
+                if (!addonGroups[addon.Addon_Group_Name]) {
+                    addonGroups[addon.Addon_Group_Name] = { 
+                        items: [], 
+                        type: addon.Addon_Item_Selection === 'S' ? 'radio' : 'checkbox', 
+                        name: addon.Addon_Group_Name.replace(/\s+/g, '-') 
+                    };
+                }
+                addonGroups[addon.Addon_Group_Name].items.push(addon);
+            });
+            
+            let addonHtml = '';
+            for (const groupName in addonGroups) {
+                const group = addonGroups[groupName];
+                addonHtml += `<div style="margin-bottom: 25px;"><h4 style="font-size: 1em; font-weight: 600; margin-bottom: 12px; border-bottom: 1px solid #eee; padding-bottom: 8px; color: #333;">${groupName}</h4>`;
+                group.items.forEach(addon => {
+                    const isChecked = existingItem ? existingItem.selectedAddons.some(sa => sa.name === addon.Addon_Item_Name) : false;
+                    addonHtml += `
+                        <div style="display: flex; align-items: center; margin-bottom: 14px; padding: 10px; border-radius: 8px; transition: background 0.2s;">
+                            <input type="${group.type}" name="${group.name}" id="${addon.Addon_Item_Name}" value="${addon.Addon_Item_Price}" data-name="${addon.Addon_Item_Name}" ${isChecked ? 'checked' : ''} style="margin-right: 12px; min-width: 20px; min-height: 20px; cursor: pointer;">
+                            <label for="${addon.Addon_Item_Name}" style="flex-grow: 1; font-size: 0.95em; cursor: pointer; line-height: 1.4;">${addon.Addon_Item_Name}</label>
+                            <span style="font-weight: 600; color: var(--primary-color); font-size: 0.95em;">+ ₹${addon.Addon_Item_Price}</span>
+                        </div>
+                    `;
+                });
+                addonHtml += `</div>`;
+            }
+            
+            const custModalContent = document.getElementById('customization-modal-content');
+            custModalContent.innerHTML = `
+                <div class="modal-header">
+                    <div style="font-size: 1.2em; font-weight: 700;">${item.Name}</div>
+                    <span class="close-btn" id="close-cust-modal">&times;</span>
+                </div>
+                <div class="modal-body">
+                    ${addonHtml}
+                    <textarea id="special-instructions" placeholder="Special instructions..." style="width: 100%; padding: 12px; border-radius: 8px; border: 1.5px solid var(--border-color); margin-top: 10px; resize: vertical; min-height: 80px; font-size: 0.95em; font-family: 'Roboto', sans-serif;">${existingItem ? existingItem.instructions : ''}</textarea>
+                </div>
+                <div style="padding: 15px 20px; border-top: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; background: #fff; position: sticky; bottom: 0;">
+                    <div style="display: flex; align-items: center; background: var(--secondary-color); border-radius: 25px; padding: 4px;">
+                        <button class="quantity-btn" id="decrease-qty" style="background: white; border: none; min-width: 40px; min-height: 40px; font-size: 1.3em; cursor: pointer; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--primary-color); font-weight: 700;">-</button>
+                        <span id="quantity-display" style="padding: 0 20px; font-weight: 700; font-size: 1.1em; min-width: 50px; text-align: center;">${existingItem ? existingItem.quantity : 1}</span>
+                        <button class="quantity-btn" id="increase-qty" style="background: white; border: none; min-width: 40px; min-height: 40px; font-size: 1.3em; cursor: pointer; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--primary-color); font-weight: 700;">+</button>
+                    </div>
+                    <button id="add-to-cart-btn" style="background: var(--primary-color); color: white; border: none; padding: 12px 24px; border-radius: 25px; font-weight: 700; cursor: pointer; font-size: 1em; min-height: 48px;">${editingCartItemIndex !== null ? 'Update Item' : 'Add Item'}</button>
+                </div>
+            `;
+            
+            document.getElementById('customization-modal-overlay').classList.add('visible');
+            updateModalPrice();
+            
+            document.getElementById('decrease-qty').addEventListener('click', () => updateQuantity(-1));
+            document.getElementById('increase-qty').addEventListener('click', () => updateQuantity(1));
+            document.getElementById('add-to-cart-btn').addEventListener('click', saveItemToCart);
+            document.getElementById('close-cust-modal').addEventListener('click', closeCustomizationModal);
+            custModalContent.querySelectorAll('input[type="radio"], input[type="checkbox"]').forEach(input => {
+                input.addEventListener('change', updateModalPrice);
+            });
+        }
+        
+        function updateModalPrice() {
+            const custModalContent = document.getElementById('customization-modal-content');
+            let addonPrice = Array.from(custModalContent.querySelectorAll('input:checked')).reduce((sum, input) => sum + parseFloat(input.value), 0);
+            const quantity = parseInt(document.getElementById('quantity-display').textContent);
+            const totalItemPrice = (currentItemForModal.Price + addonPrice) * quantity;
+            document.getElementById('add-to-cart-btn').textContent = `${editingCartItemIndex !== null ? 'Update' : 'Add'} Item - ₹${totalItemPrice.toFixed(2)}`;
+        }
+
+        function updateQuantity(change) {
+            const qtyDisplay = document.getElementById('quantity-display');
+            let currentQty = parseInt(qtyDisplay.textContent) + change;
+            if (currentQty < 1) currentQty = 1;
+            qtyDisplay.textContent = currentQty;
+            updateModalPrice();
+        }
+
+        function closeCustomizationModal() {
+            document.getElementById('customization-modal-overlay').classList.remove('visible');
+            document.getElementById('customization-modal-content').innerHTML = '';
+            currentItemForModal = null;
+            editingCartItemIndex = null;
+        }
+        
+        function saveItemToCart() {
+            const custModalContent = document.getElementById('customization-modal-content');
+            const selectedAddons = Array.from(custModalContent.querySelectorAll('input:checked')).map(input => ({ 
+                name: input.dataset.name, 
+                price: parseFloat(input.value) 
+            }));
+            const quantity = parseInt(document.getElementById('quantity-display').textContent);
+            const instructions = document.getElementById('special-instructions').value;
+            const basePrice = currentItemForModal.Price;
+            const addonsTotalPrice = selectedAddons.reduce((sum, addon) => sum + addon.price, 0);
+            const itemSubtotal = (basePrice + addonsTotalPrice) * quantity;
+            const cartItem = { ...currentItemForModal, selectedAddons, quantity, instructions, subtotal: itemSubtotal };
+            
+            if (editingCartItemIndex !== null) {
+                cart[editingCartItemIndex] = cartItem;
+            } else {
+                cart.push(cartItem);
+            }
+            
+            updateCartSummary();
+            renderItems(activeCategory);
+            closeCustomizationModal();
         }
 
         function renderCartModal() {
@@ -1514,6 +1664,8 @@
                     ${instructionsHtml}
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px;">
                         <div>
+                            ${item.selectedAddons && item.selectedAddons.length > 0 || item.instructions ? 
+                                `<button class="cart-edit-btn" data-cart-index="${index}" style="color: #5bc0de; border-color: #5bc0de; font-size: 0.85em; padding: 8px 14px; border: 1.5px solid; border-radius: 20px; cursor: pointer; background: white; font-weight: 600; margin-right: 8px;">Edit</button>` : ''}
                             <button class="cart-remove-btn" data-cart-index="${index}" style="color: #d9534f; border-color: #d9534f; font-size: 0.85em; padding: 8px 14px; border: 1.5px solid; border-radius: 20px; cursor: pointer; background: white; font-weight: 600;">Remove</button>
                         </div>
                         <div style="font-weight: 700; font-size: 1em; color: var(--primary-color);">₹${item.subtotal.toFixed(2)}</div>
@@ -1530,6 +1682,15 @@
                 <div class="totals-row"><span>GST (${gstPercent}%)</span><span>₹${gst.toFixed(2)}</span></div>
                 <div class="totals-row grand-total"><span>Grand Total</span><span>₹${grandTotal.toFixed(2)}</span></div>
             `;
+            
+            // Add edit button handlers
+            cartModalBody.querySelectorAll('.cart-edit-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const cartIndex = parseInt(e.target.dataset.cartIndex);
+                    document.getElementById('cart-modal-overlay').classList.remove('visible');
+                    openCustomizationModal(cart[cartIndex], cartIndex);
+                });
+            });
             
             cartModalBody.querySelectorAll('.cart-remove-btn').forEach(btn => {
                 btn.addEventListener('click', (e) => {
@@ -1636,6 +1797,10 @@
             console.log('Loading menu items...');
             menuItems = await fetchAndParseCSV(MENU_CSV_URL);
             console.log('✓ Menu items loaded:', menuItems.length);
+            
+            console.log('Loading add-ons...');
+            addons = await fetchAndParseCSV(ADDONS_CSV_URL);
+            console.log('✓ Add-ons loaded:', addons.length);
             
             // Update brand name in header
             document.getElementById('brand-name').textContent = brandName;
