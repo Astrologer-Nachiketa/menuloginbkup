@@ -267,6 +267,7 @@
             transition: transform 0.3s;
             z-index: 50;
             box-shadow: 0 -4px 12px rgba(0,0,0,0.15);
+            pointer-events: auto;
         }
         .cart-summary.visible { transform: translateY(0); }
         #view-order-btn {
@@ -278,6 +279,13 @@
             font-weight: 700;
             cursor: pointer;
             min-height: 44px;
+            pointer-events: auto;
+            z-index: 51;
+            position: relative;
+        }
+        #view-order-btn:active {
+            transform: scale(0.95);
+            background: #f0f0f0;
         }
         .modal-overlay {
             position: fixed;
@@ -560,7 +568,7 @@
     <script>
     document.addEventListener('DOMContentLoaded', () => {
         // ⚠️ IMPORTANT: Replace with your Apps Script Web App URL
-        const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxAj5s6deUUfu4TWNlG6XcZVW6R7gwtUPthRtP-UIgh9a_QCU3KfQS0YaoVICQm-zZP/exec';
+        const APPS_SCRIPT_URL = 'YOUR_APPS_SCRIPT_WEB_APP_URL_HERE';
         
         let GST_RATE = 0.05;
         let deviceId = null;
@@ -1183,11 +1191,30 @@
         document.getElementById('close-cart-modal').addEventListener('click', () => {
             document.getElementById('cart-modal-overlay').classList.remove('visible');
         });
-        document.getElementById('view-order-btn').addEventListener('click', () => {
-            renderCartModal();
-            showEditDetailsButton(); // Show customer details and edit button
-            document.getElementById('cart-modal-overlay').classList.add('visible');
+        
+        // View Order button - using event delegation to ensure it always works
+        const cartSummaryBar = document.getElementById('cart-summary-bar');
+        cartSummaryBar.addEventListener('click', (e) => {
+            console.log('Cart summary clicked', e.target);
+            if (e.target.id === 'view-order-btn' || e.target.closest('#view-order-btn')) {
+                console.log('View Order button triggered');
+                renderCartModal();
+                showEditDetailsButton();
+                document.getElementById('cart-modal-overlay').classList.add('visible');
+            }
         });
+        
+        // Also add direct listener as backup
+        const viewOrderBtn = document.getElementById('view-order-btn');
+        if (viewOrderBtn) {
+            viewOrderBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                console.log('Direct view order click');
+                renderCartModal();
+                showEditDetailsButton();
+                document.getElementById('cart-modal-overlay').classList.add('visible');
+            });
+        }
         
         // Modal overlay click handlers (close on overlay click)
         document.getElementById('customization-modal-overlay').addEventListener('click', (e) => {
