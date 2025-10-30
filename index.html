@@ -1023,6 +1023,65 @@
             }
         });
 
+        // Add "Edit Details" button to cart modal
+        function showEditDetailsButton() {
+            const cartModalFooter = document.querySelector('#cart-modal-overlay .modal-footer');
+            let editBtn = document.getElementById('edit-details-btn');
+            
+            if (!editBtn) {
+                editBtn = document.createElement('button');
+                editBtn.id = 'edit-details-btn';
+                editBtn.textContent = '✏️ Edit My Details';
+                editBtn.style.cssText = `
+                    background: #5bc0de;
+                    color: white;
+                    border: none;
+                    padding: 12px 24px;
+                    border-radius: 25px;
+                    font-weight: 700;
+                    cursor: pointer;
+                    font-size: 0.95em;
+                    margin-bottom: 10px;
+                    width: 100%;
+                `;
+                editBtn.addEventListener('click', () => {
+                    document.getElementById('cart-modal-overlay').classList.remove('visible');
+                    showCustomerDetailsModal();
+                });
+                
+                // Insert before place order button
+                const placeOrderBtn = document.getElementById('place-order-btn');
+                placeOrderBtn.parentElement.insertBefore(editBtn, placeOrderBtn);
+            }
+            
+            // Show customer details summary above edit button
+            if (customerDetails) {
+                let detailsSummary = document.getElementById('customer-details-summary');
+                if (!detailsSummary) {
+                    detailsSummary = document.createElement('div');
+                    detailsSummary.id = 'customer-details-summary';
+                    detailsSummary.style.cssText = `
+                        background: #f8f9fa;
+                        padding: 15px;
+                        border-radius: 8px;
+                        margin-bottom: 15px;
+                        font-size: 0.9em;
+                    `;
+                    const placeOrderBtn = document.getElementById('place-order-btn');
+                    placeOrderBtn.parentElement.insertBefore(detailsSummary, editBtn);
+                }
+                
+                detailsSummary.innerHTML = `
+                    <div style="font-weight: 600; margin-bottom: 8px; color: #333;">📋 Delivery Details:</div>
+                    <div style="color: #666; line-height: 1.6;">
+                        <div><strong>Name:</strong> ${customerDetails.name}</div>
+                        <div><strong>Phone:</strong> ${customerDetails.phone}</div>
+                        <div><strong>Address:</strong> ${customerDetails.address}</div>
+                    </div>
+                `;
+            }
+        }
+
         document.getElementById('place-order-btn').addEventListener('click', () => {
             if (cart.length === 0) {
                 alert('Your cart is empty!');
