@@ -1,4 +1,4 @@
-//https://script.google.com/macros/s/AKfycbxAj5s6deUUfu4TWNlG6XcZVW6R7gwtUPthRtP-UIgh9a_QCU3KfQS0YaoVICQm-zZP/exec
+//https://script.google.com/macros/s/AKfycby2E4Xl2I1oTvLeoywpOR3SSR4TOGNwugKJQF3j9FTnnNY3-n15Fl0AMisF1GnW6Xo6/exec
 const SHEET_ID = '1Js6OE6o4YZ6iVtWCqkWNNqlJwkIt0R5Q-zeWno_-Z6o'; // Replace with your sheet ID
 // Google Apps Script - Order Management Backend
 // Deploy as Web App with "Anyone" access
@@ -104,11 +104,18 @@ function getRecentOrders() {
       orderId: row[0],
       deviceId: row[1],
       customerName: row[2],
+      // [3] Customer_Phone, [4] Customer_Address
       tableNumber: row[5],
       orderItems: row[6], // JSON string
+      subtotal: row[7],
+      discount: row[8],
+      gst: row[9],
       grandTotal: row[10],
+      // <<< FIX: Explicitly include General_Instructions from index 11 >>>
+      generalInstructions: row[11], 
       status: row[12],
-      timestamp: row[13]
+      timestamp: row[13],
+      // [14] Location_Lat, [15] Location_Lng, [16] Distance_KM
     });
   }
   
@@ -187,10 +194,10 @@ function submitOrder(data) {
   if (data.orderItems && typeof data.orderItems === 'string') {
     // If it's a string, try to parse it (if client stringified it)
     try {
-        orderItems = JSON.parse(data.orderItems);
+      orderItems = JSON.parse(data.orderItems);
     } catch (e) {
-        // Fallback for simple form data that doesn't include the full JSON array
-        orderItems = [{ name: 'Default Item (Form Data)', quantity: 1, price: data.grandTotal || 0 }];
+      // Fallback for simple form data that doesn't include the full JSON array
+      orderItems = [{ name: 'Default Item (Form Data)', quantity: 1, price: data.grandTotal || 0 }];
     }
   } else if (data.orderItems) {
       // It came as a parsed JSON array
@@ -212,7 +219,7 @@ function submitOrder(data) {
     data.discount || 0,
     data.gst || 0,
     data.grandTotal || 0,
-    data.generalInstructions || '',
+    data.generalInstructions || '', // General Instructions is index 11
     'Pending',
     new Date(),
     data.locationLat || '',
