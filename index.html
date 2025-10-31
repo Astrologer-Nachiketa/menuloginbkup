@@ -365,10 +365,17 @@
             box-shadow: 0 2px 8px rgba(0,0,0,0.08);
             cursor: pointer;
             transition: all 0.2s;
+            pointer-events: auto;
+            user-select: none;
+            -webkit-tap-highlight-color: rgba(0,0,0,0.1);
         }
         .order-status-card:hover {
             box-shadow: 0 4px 12px rgba(0,0,0,0.12);
             transform: translateY(-2px);
+        }
+        .order-status-card:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 6px rgba(0,0,0,0.1);
         }
         .order-status-card.expanded {
             border-left-width: 6px;
@@ -378,6 +385,7 @@
             padding-top: 15px;
             border-top: 1px solid #eee;
             display: none;
+            pointer-events: none;
         }
         .order-items-details.visible {
             display: block;
@@ -818,6 +826,8 @@
                 const orderCard = document.createElement('div');
                 orderCard.className = 'order-status-card';
                 orderCard.dataset.orderId = order.orderId;
+                orderCard.style.cursor = 'pointer';
+                orderCard.setAttribute('onclick', `console.log('Inline click works for ${order.orderId}')`);
                 
                 const statusClass = order.status.toLowerCase();
                 const statusEmoji = {
@@ -844,15 +854,30 @@
                         <div>Date: ${formattedDate}</div>
                         ${order.tableNumber ? `<div>Table: ${order.tableNumber}</div>` : ''}
                         <div class="order-total">Total: ₹${order.grandTotal.toFixed(2)}</div>
-                        <div style="margin-top: 8px; font-size: 0.85em; color: #999;">Tap to view details ▼</div>
+                        <div style="margin-top: 8px; font-size: 0.85em; color: var(--primary-color); font-weight: 600;">👆 Tap to view details ▼</div>
                     </div>
                     <div class="order-items-details" id="details-${order.orderId}">
-                        <div style="text-align: center; color: #999; padding: 10px;">Loading order details...</div>
+                        <div style="text-align: center; color: #999; padding: 10px;">Tap above to load details</div>
                     </div>
                 `;
                 
-                // Add click handler to toggle details
-                orderCard.addEventListener('click', () => toggleOrderDetails(order.orderId));
+                // Add click handler to toggle details - Multiple methods for debugging
+                orderCard.onclick = function() {
+                    console.log('Card onclick fired for:', order.orderId);
+                    toggleOrderDetails(order.orderId);
+                };
+                
+                orderCard.addEventListener('click', (e) => {
+                    console.log('addEventListener fired for:', order.orderId);
+                    e.stopPropagation();
+                    toggleOrderDetails(order.orderId);
+                });
+                
+                orderCard.addEventListener('touchend', (e) => {
+                    console.log('Touch event fired for:', order.orderId);
+                    e.preventDefault();
+                    toggleOrderDetails(order.orderId);
+                });
                 
                 ordersList.appendChild(orderCard);
             });
@@ -862,100 +887,132 @@
             const detailsDiv = document.getElementById(`details-${orderId}`);
             const orderCard = document.querySelector(`[data-order-id="${orderId}"]`);
             
+            console.log('Toggle order details for:', orderId);
+            console.log('Details div:', detailsDiv);
+            console.log('Order card:', orderCard);
+            
             if (detailsDiv.classList.contains('visible')) {
                 // Collapse
                 detailsDiv.classList.remove('visible');
                 orderCard.classList.remove('expanded');
-            } else {
-                // Expand - fetch full order details from backend
-                detailsDiv.classList.add('visible');
-                orderCard.classList.add('expanded');
+                return;
+            }
+            
+            // Expand - fetch full order details from backend
+            detailsDiv.classList.add('visible');
+            orderCard.classList.add('expanded');
+            
+            // If already loaded, don't fetch again
+            if (detailsDiv.dataset.loaded === 'true') {
+                console.log('Order details already loaded');
+                return;
+            }
+            
+            // Show loading state
+            detailsDiv.innerHTML = '<div style="text-align: center; color: #999; padding: 10px;">Loading order details...</div>';
+            
+            try {
+                console.log('Fetching order details from:', `${APPS_SCRIPT_URL}?action=getOrderDetails&orderId=${orderId}`);
+                const response = await fetch(`${APPS_SCRIPT_URL}?action=getOrderDetails&orderId=${orderId}`);
+                const data = await response.json();
                 
-                // If already loaded, don't fetch again
-                if (detailsDiv.dataset.loaded === 'true') return;
+                console.log('Order details response:', data);
                 
-                try {
-                    const response = await fetch(`${APPS_SCRIPT_URL}?action=getOrderDetails&orderId=${orderId}`);
-                    const data = await response.json();
+                if (data.status === 'success' && data.order) {
+                    const order = data.order;
+                    let orderItems = [];
                     
-                    if (data.status === 'success' && data.order) {
-                        const order = data.order;
-                        let orderItems = [];
-                        
-                        try {
-                            orderItems = typeof order.orderItems === 'string' ? 
-                                JSON.parse(order.orderItems) : order.orderItems;
-                        } catch (e) {
-                            console.error('Error parsing order items:', e);
-                        }
-                        
-                        let itemsHtml = '<div style="font-weight: 600; margin-bottom: 10px; color: #333;">Order Items:</div>';
+                    try {
+                        orderItems = typeof order.orderItems === 'string' ? 
+                            JSON.parse(order.orderItems) : order.orderItems;
+                        console.log('Parsed order items:', orderItems);
+                    } catch (e) {
+                        console.error('Error parsing order items:', e);
+                        console.log('Raw order items:', order.orderItems);
+                    }
+                    
+                    let itemsHtml = '<div style="font-weight: 600; margin-bottom: 10px; color: #333; font-size: 1em;">📋 Order Items:</div>';
+                    
+                    if (orderItems && orderItems.length > 0) {
                         orderItems.forEach(item => {
                             itemsHtml += `
                                 <div class="order-item-row">
                                     <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
                                         <span style="font-weight: 600;">${item.quantity}x ${item.name}</span>
-                                        <span style="color: var(--primary-color); font-weight: 600;">₹${item.subtotal.toFixed(2)}</span>
+                                        <span style="color: var(--primary-color); font-weight: 600;">₹${(item.subtotal || item.price * item.quantity).toFixed(2)}</span>
                                     </div>
                             `;
                             
                             if (item.addons && item.addons.length > 0) {
-                                itemsHtml += '<div style="font-size: 0.85em; color: #666; margin-left: 15px;">';
+                                itemsHtml += '<div style="font-size: 0.85em; color: #666; margin-left: 15px; margin-top: 4px;">';
                                 item.addons.forEach(addon => {
-                                    itemsHtml += `• ${addon.name}<br>`;
+                                    itemsHtml += `├─ ${addon.name} (+₹${addon.price})<br>`;
                                 });
                                 itemsHtml += '</div>';
                             }
                             
-                            if (item.instructions) {
-                                itemsHtml += `<div style="font-size: 0.85em; color: #d9534f; font-style: italic; margin-left: 15px;">"${item.instructions}"</div>`;
+                            if (item.instructions && item.instructions.trim()) {
+                                itemsHtml += `<div style="font-size: 0.85em; color: #d9534f; font-style: italic; margin-left: 15px; margin-top: 4px;">📝 Item Note: "${item.instructions}"</div>`;
                             }
                             
                             itemsHtml += '</div>';
                         });
-                        
-                        if (order.generalInstructions) {
-                            itemsHtml += `
-                                <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #eee;">
-                                    <div style="font-weight: 600; color: #333; margin-bottom: 5px;">General Instructions:</div>
-                                    <div style="font-size: 0.9em; color: #666; font-style: italic;">"${order.generalInstructions}"</div>
-                                </div>
-                            `;
-                        }
-                        
-                        // Add pricing breakdown
+                    } else {
+                        itemsHtml += '<div style="color: #999; font-size: 0.9em;">No items found</div>';
+                    }
+                    
+                    if (order.generalInstructions && order.generalInstructions.trim()) {
                         itemsHtml += `
-                            <div style="margin-top: 15px; padding-top: 15px; border-top: 2px solid #eee;">
-                                <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
-                                    <span>Subtotal:</span>
-                                    <span>₹${parseFloat(order.subtotal).toFixed(2)}</span>
-                                </div>
-                                ${parseFloat(order.discount) > 0 ? `
-                                <div style="display: flex; justify-content: space-between; margin-bottom: 5px; color: #25D366;">
-                                    <span>Discount:</span>
-                                    <span>-₹${parseFloat(order.discount).toFixed(2)}</span>
-                                </div>
-                                ` : ''}
-                                <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
-                                    <span>GST:</span>
-                                    <span>₹${parseFloat(order.gst).toFixed(2)}</span>
-                                </div>
-                                <div style="display: flex; justify-content: space-between; font-weight: 700; font-size: 1.1em; color: var(--primary-color); margin-top: 8px; padding-top: 8px; border-top: 1px solid #ddd;">
-                                    <span>Grand Total:</span>
-                                    <span>₹${parseFloat(order.grandTotal).toFixed(2)}</span>
-                                </div>
+                            <div style="margin-top: 15px; padding: 12px; background: #fff3cd; border-left: 4px solid #ffc107; border-radius: 4px;">
+                                <div style="font-weight: 600; color: #856404; margin-bottom: 5px; font-size: 0.9em;">🔔 GENERAL NOTE:</div>
+                                <div style="font-size: 0.9em; color: #856404; font-style: italic;">"${order.generalInstructions}"</div>
                             </div>
                         `;
-                        
-                        detailsDiv.innerHTML = itemsHtml;
-                        detailsDiv.dataset.loaded = 'true';
-                    } else {
-                        detailsDiv.innerHTML = '<div style="color: #d9534f; text-align: center; padding: 10px;">Error loading order details</div>';
                     }
-                } catch (error) {
-                    console.error('Error fetching order details:', error);
-                    detailsDiv.innerHTML = '<div style="color: #d9534f; text-align: center; padding: 10px;">Error loading order details</div>';
+                    
+                    // Add pricing breakdown
+                    itemsHtml += `
+                        <div style="margin-top: 15px; padding-top: 15px; border-top: 2px solid #eee;">
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 0.9em;">
+                                <span>Subtotal:</span>
+                                <span>₹${parseFloat(order.subtotal || 0).toFixed(2)}</span>
+                            </div>
+                            ${parseFloat(order.discount || 0) > 0 ? `
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 5px; color: #25D366; font-size: 0.9em;">
+                                <span>Discount:</span>
+                                <span>-₹${parseFloat(order.discount).toFixed(2)}</span>
+                            </div>
+                            ` : ''}
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 0.9em;">
+                                <span>GST:</span>
+                                <span>₹${parseFloat(order.gst || 0).toFixed(2)}</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; font-weight: 700; font-size: 1.1em; color: var(--primary-color); margin-top: 8px; padding-top: 8px; border-top: 1px solid #ddd;">
+                                <span>Grand Total:</span>
+                                <span>₹${parseFloat(order.grandTotal).toFixed(2)}</span>
+                            </div>
+                        </div>
+                    `;
+                    
+                    // Add customer details
+                    if (order.customerPhone || order.customerAddress) {
+                        itemsHtml += `
+                            <div style="margin-top: 15px; padding: 12px; background: #f8f9fa; border-radius: 8px; font-size: 0.9em;">
+                                <div style="font-weight: 600; margin-bottom: 8px; color: #333;">👤 Customer Info:</div>
+                                ${order.customerPhone ? `<div style="color: #666;">📞 ${order.customerPhone}</div>` : ''}
+                                ${order.customerAddress ? `<div style="color: #666; margin-top: 4px;">📍 ${order.customerAddress}</div>` : ''}
+                            </div>
+                        `;
+                    }
+                    
+                    detailsDiv.innerHTML = itemsHtml;
+                    detailsDiv.dataset.loaded = 'true';
+                } else {
+                    detailsDiv.innerHTML = '<div style="color: #d9534f; text-align: center; padding: 10px;">Error: ' + (data.message || 'Could not load order details') + '</div>';
                 }
+            } catch (error) {
+                console.error('Error fetching order details:', error);
+                detailsDiv.innerHTML = '<div style="color: #d9534f; text-align: center; padding: 10px;">Network error loading order details</div>';
             }
         }
 
