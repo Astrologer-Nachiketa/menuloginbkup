@@ -1,5 +1,6 @@
-//https://script.google.com/macros/s/AKfycby2E4Xl2I1oTvLeoywpOR3SSR4TOGNwugKJQF3j9FTnnNY3-n15Fl0AMisF1GnW6Xo6/exec
-const SHEET_ID = '1Js6OE6o4YZ6iVtWCqkWNNqlJwkIt0R5Q-zeWno_-Z6o'; // Replace with your sheet ID
+//https://script.google.com/macros/s/AKfycbyJ0feGSsGQg93-yvuXJLwj184Cd0efF19W9iRPdK_DzL1k6wZje3Ds1PGmVXFCELpj/exec
+// Replace with your sheet ID
+const SHEET_ID = '1Js6OE6o4YZ6iVtWCqkWNNqlJwkIt0R5Q-zeWno_-Z6o'; 
 // Google Apps Script - Order Management Backend
 // Deploy as Web App with "Anyone" access
 
@@ -24,8 +25,10 @@ function doGet(e) {
     return checkOrderStatus(e.parameter.deviceId);
   } else if (action === 'getCustomerDetails') {
     return getCustomerDetails(e.parameter.deviceId);
-  } else if (action === 'getRecentOrders') { // NEW ROUTE for Staff Dashboard
+  } else if (action === 'getRecentOrders') { // Existing route for Staff Dashboard
     return getRecentOrders();
+  } else if (action === 'getOrderDetails') { // <<< NEW ROUTE ADDED FOR YOUR REQUEST
+    return getOrderDetails(e.parameter.orderId);
   }
   
   return createJsonResponse({
@@ -60,7 +63,7 @@ function doPost(e) {
       return submitOrder(data);
     } else if (action === 'saveCustomerDetails') {
       return saveCustomerDetails(data);
-    } else if (action === 'updateOrderStatus') { // NEW ROUTE for Staff Dashboard
+    } else if (action === 'updateOrderStatus') { // Existing route for Staff Dashboard
       return updateOrderStatus(data);
     }
     
@@ -77,7 +80,63 @@ function doPost(e) {
   }
 }
 
-// --- New Staff Dashboard Functions ---
+// --- NEW FUNCTION to retrieve specific order details ---
+
+/**
+ * Retrieves all details for a specific order by its ID.
+ * @param {string} orderId The ID of the order to retrieve.
+ * @return {GoogleAppsScript.Content.TextOutput} JSON response with order details.
+ */
+function getOrderDetails(orderId) {
+  if (!orderId) {
+    return createJsonResponse({ status: 'error', message: 'Missing orderId parameter.' });
+  }
+
+  const ordersSheet = ss.getSheetByName('Orders');
+  if (!ordersSheet) {
+    return createJsonResponse({ status: 'error', message: 'Orders sheet not found.' });
+  }
+
+  const data = ordersSheet.getDataRange().getValues();
+  const header = data[0]; // Assuming the first row is the header
+
+  // Find the row matching the orderId (skip header row)
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    // Column A is OrderId (index 0)
+    if (row[0] === orderId) {
+      const orderDetails = {};
+      
+      // Map the cell values to the header names for a robust structure
+      header.forEach((colName, index) => {
+        // Normalize column name: replace spaces with underscores for object keys
+        orderDetails[colName.trim().replace(/\s+/g, '_')] = row[index];
+      });
+      
+      // Special handling for Order_Items (which is stored as a JSON string)
+      if (orderDetails.Order_Items && typeof orderDetails.Order_Items === 'string') {
+        try {
+          orderDetails.Order_Items = JSON.parse(orderDetails.Order_Items);
+        } catch (e) {
+          Logger.log('Failed to parse Order_Items JSON for order: ' + orderId);
+        }
+      }
+      
+      return createJsonResponse({
+        status: 'success',
+        order: orderDetails
+      });
+    }
+  }
+
+  return createJsonResponse({
+    status: 'error',
+    message: `Order ID ${orderId} not found.`
+  });
+}
+
+
+// --- Existing Staff Dashboard Functions ---
 
 /**
  * Retrieves the last 50 orders for the staff dashboard.
@@ -111,7 +170,6 @@ function getRecentOrders() {
       discount: row[8],
       gst: row[9],
       grandTotal: row[10],
-      // <<< FIX: Explicitly include General_Instructions from index 11 >>>
       generalInstructions: row[11], 
       status: row[12],
       timestamp: row[13],
@@ -126,6 +184,33 @@ function getRecentOrders() {
     status: 'success',
     orders: orders
   });
+}
+
+/**
+ * **NEW HELPER FUNCTION:** Logs the timestamp for specific status transitions.
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The Orders sheet.
+ * @param {number} row The 1-based row index to update.
+ * @param {string} oldStatus The previous status.
+ * @param {string} newStatus The new status being set.
+ */
+function logStatusTransition(sheet, row, oldStatus, newStatus) {
+  const currentTime = new Date();
+
+  // New Status: Ready (Transition: Pending -> Ready)
+  // Target Column: R (18th column)
+  if (oldStatus === 'Pending' && newStatus === 'Ready') {
+    const READY_TIMESTAMP_COL = 18; // Column R is the 18th column
+    sheet.getRange(row, READY_TIMESTAMP_COL).setValue(currentTime);
+    Logger.log(`Order ${sheet.getRange(row, 1).getValue()} Ready timestamp set to ${currentTime}`);
+  }
+
+  // New Status: Delivered (Transition: Ready -> Delivered)
+  // Target Column: S (19th column)
+  if (oldStatus === 'Ready' && newStatus === 'Delivered') {
+    const DELIVERED_TIMESTAMP_COL = 19; // Column S is the 19th column
+    sheet.getRange(row, DELIVERED_TIMESTAMP_COL).setValue(currentTime);
+    Logger.log(`Order ${sheet.getRange(row, 1).getValue()} Delivered timestamp set to ${currentTime}`);
+  }
 }
 
 /**
@@ -149,21 +234,27 @@ function updateOrderStatus(data) {
   const values = dataRange.getValues();
   
   let orderRowIndex = -1;
+  let oldStatus = null;
+  
+  // Status is in column M, which is the 13th column (index 12)
+  const STATUS_COL_INDEX = 12; // 0-based index for the array
+  const STATUS_COL = 13; // 1-based index for GAS Range
   
   // Find the row matching the orderId (skip header row)
   for (let i = 1; i < values.length; i++) {
     if (values[i][0] === orderId) {
       orderRowIndex = i + 1; // 1-based index for GAS Range
+      oldStatus = values[i][STATUS_COL_INDEX]; // Get the existing status
       break;
     }
   }
   
   if (orderRowIndex > 0) {
-    // Status is in column M, which is the 13th column (index 12)
-    const STATUS_COL = 13; 
-    
-    // Update the status cell
+    // 1. Update the status cell
     ordersSheet.getRange(orderRowIndex, STATUS_COL).setValue(newStatus);
+    
+    // 2. Call the new helper function for transition logging
+    logStatusTransition(ordersSheet, orderRowIndex, oldStatus, newStatus);
     
     return createJsonResponse({
       status: 'success',
@@ -177,7 +268,7 @@ function updateOrderStatus(data) {
   }
 }
 
-// --- Existing Functions ---
+// --- Existing Functions (Unchanged) ---
 
 function submitOrder(data) {
   const ordersSheet = ss.getSheetByName('Orders');
@@ -225,6 +316,7 @@ function submitOrder(data) {
     data.locationLat || '',
     data.locationLng || '',
     data.distanceKm || ''
+    // Columns R (Ready Timestamp) and S (Delivered Timestamp) will be left blank
   ];
   
   // Append to sheet
