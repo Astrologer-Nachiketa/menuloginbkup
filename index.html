@@ -922,24 +922,31 @@
                     const order = data.order;
                     let orderItems = [];
                     
+                    // Handle both naming conventions from backend
+                    const orderItemsData = order.orderItems || order.Order_Items || order['Order_Items_(JSON_string)'];
+                    
                     try {
-                        orderItems = typeof order.orderItems === 'string' ? 
-                            JSON.parse(order.orderItems) : order.orderItems;
+                        if (typeof orderItemsData === 'string') {
+                            orderItems = JSON.parse(orderItemsData);
+                        } else if (Array.isArray(orderItemsData)) {
+                            orderItems = orderItemsData;
+                        }
                         console.log('Parsed order items:', orderItems);
                     } catch (e) {
                         console.error('Error parsing order items:', e);
-                        console.log('Raw order items:', order.orderItems);
+                        console.log('Raw order items:', orderItemsData);
                     }
                     
                     let itemsHtml = '<div style="font-weight: 600; margin-bottom: 10px; color: #333; font-size: 1em;">📋 Order Items:</div>';
                     
                     if (orderItems && orderItems.length > 0) {
                         orderItems.forEach(item => {
+                            const itemSubtotal = item.subtotal || (item.price * item.quantity);
                             itemsHtml += `
                                 <div class="order-item-row">
                                     <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
                                         <span style="font-weight: 600;">${item.quantity}x ${item.name}</span>
-                                        <span style="color: var(--primary-color); font-weight: 600;">₹${(item.subtotal || item.price * item.quantity).toFixed(2)}</span>
+                                        <span style="color: var(--primary-color); font-weight: 600;">₹${itemSubtotal.toFixed(2)}</span>
                                     </div>
                             `;
                             
@@ -961,46 +968,56 @@
                         itemsHtml += '<div style="color: #999; font-size: 0.9em;">No items found</div>';
                     }
                     
-                    if (order.generalInstructions && order.generalInstructions.trim()) {
+                    // Handle general instructions with both naming conventions
+                    const generalInstructions = order.generalInstructions || order.General_Instructions || '';
+                    if (generalInstructions && generalInstructions.trim()) {
                         itemsHtml += `
                             <div style="margin-top: 15px; padding: 12px; background: #fff3cd; border-left: 4px solid #ffc107; border-radius: 4px;">
                                 <div style="font-weight: 600; color: #856404; margin-bottom: 5px; font-size: 0.9em;">🔔 GENERAL NOTE:</div>
-                                <div style="font-size: 0.9em; color: #856404; font-style: italic;">"${order.generalInstructions}"</div>
+                                <div style="font-size: 0.9em; color: #856404; font-style: italic;">"${generalInstructions}"</div>
                             </div>
                         `;
                     }
                     
-                    // Add pricing breakdown
+                    // Add pricing breakdown - handle both naming conventions
+                    const subtotal = order.subtotal || order.Subtotal || 0;
+                    const discount = order.discount || order.Discount || 0;
+                    const gst = order.gst || order.GST || 0;
+                    const grandTotal = order.grandTotal || order.Grand_Total || 0;
+                    
                     itemsHtml += `
                         <div style="margin-top: 15px; padding-top: 15px; border-top: 2px solid #eee;">
                             <div style="display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 0.9em;">
                                 <span>Subtotal:</span>
-                                <span>₹${parseFloat(order.subtotal || 0).toFixed(2)}</span>
+                                <span>₹${parseFloat(subtotal).toFixed(2)}</span>
                             </div>
-                            ${parseFloat(order.discount || 0) > 0 ? `
+                            ${parseFloat(discount) > 0 ? `
                             <div style="display: flex; justify-content: space-between; margin-bottom: 5px; color: #25D366; font-size: 0.9em;">
                                 <span>Discount:</span>
-                                <span>-₹${parseFloat(order.discount).toFixed(2)}</span>
+                                <span>-₹${parseFloat(discount).toFixed(2)}</span>
                             </div>
                             ` : ''}
                             <div style="display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 0.9em;">
                                 <span>GST:</span>
-                                <span>₹${parseFloat(order.gst || 0).toFixed(2)}</span>
+                                <span>₹${parseFloat(gst).toFixed(2)}</span>
                             </div>
                             <div style="display: flex; justify-content: space-between; font-weight: 700; font-size: 1.1em; color: var(--primary-color); margin-top: 8px; padding-top: 8px; border-top: 1px solid #ddd;">
                                 <span>Grand Total:</span>
-                                <span>₹${parseFloat(order.grandTotal).toFixed(2)}</span>
+                                <span>₹${parseFloat(grandTotal).toFixed(2)}</span>
                             </div>
                         </div>
                     `;
                     
-                    // Add customer details
-                    if (order.customerPhone || order.customerAddress) {
+                    // Add customer details - handle both naming conventions
+                    const customerPhone = order.customerPhone || order.Customer_Phone;
+                    const customerAddress = order.customerAddress || order.Customer_Address;
+                    
+                    if (customerPhone || customerAddress) {
                         itemsHtml += `
                             <div style="margin-top: 15px; padding: 12px; background: #f8f9fa; border-radius: 8px; font-size: 0.9em;">
                                 <div style="font-weight: 600; margin-bottom: 8px; color: #333;">👤 Customer Info:</div>
-                                ${order.customerPhone ? `<div style="color: #666;">📞 ${order.customerPhone}</div>` : ''}
-                                ${order.customerAddress ? `<div style="color: #666; margin-top: 4px;">📍 ${order.customerAddress}</div>` : ''}
+                                ${customerPhone ? `<div style="color: #666;">📞 ${customerPhone}</div>` : ''}
+                                ${customerAddress ? `<div style="color: #666; margin-top: 4px;">📍 ${customerAddress}</div>` : ''}
                             </div>
                         `;
                     }
