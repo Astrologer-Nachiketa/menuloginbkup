@@ -1059,7 +1059,19 @@
 
         function startOrderStatusRefresh() {
             if (orderCheckInterval) clearInterval(orderCheckInterval);
+            
+            // Don't start if device ID not set
+            if (!deviceId) {
+                console.log('Cannot start order refresh: Device ID not set');
+                return;
+            }
+            
+            console.log('✓ Starting order status refresh');
+            
+            // Check immediately
             checkOrderStatus();
+            
+            // Then check every 10 seconds
             orderCheckInterval = setInterval(() => {
                 checkOrderStatus();
                 
@@ -2134,7 +2146,7 @@
             });
         }
 
-        // Initialize app
+        // Initialize device ID and load data
         async function initApp() {
             deviceId = getDeviceId();
             console.log('✓ Device ID:', deviceId);
@@ -2197,7 +2209,8 @@
             // Request notification permission
             requestNotificationPermission();
             
-            // Start order status refresh
+            // IMPORTANT: Only start order status refresh AFTER device ID is confirmed
+            console.log('✓ App initialized, starting order status refresh...');
             startOrderStatusRefresh();
             
             console.log('✓ App initialized successfully');
