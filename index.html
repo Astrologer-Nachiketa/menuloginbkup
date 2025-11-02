@@ -363,29 +363,32 @@
             margin-bottom: 15px;
             border-left: 4px solid var(--primary-color);
             box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-            cursor: pointer;
             transition: all 0.2s;
             pointer-events: auto;
             user-select: none;
-            -webkit-tap-highlight-color: rgba(0,0,0,0.1);
         }
         .order-status-card:hover {
             box-shadow: 0 4px 12px rgba(0,0,0,0.12);
-            transform: translateY(-2px);
-        }
-        .order-status-card:active {
-            transform: translateY(0);
-            box-shadow: 0 2px 6px rgba(0,0,0,0.1);
         }
         .order-status-card.expanded {
             border-left-width: 6px;
+        }
+        .order-status-header,
+        .order-details {
+            cursor: pointer;
+            pointer-events: auto;
+        }
+        .order-status-header:active,
+        .order-details:active {
+            opacity: 0.7;
         }
         .order-items-details {
             margin-top: 15px;
             padding-top: 15px;
             border-top: 1px solid #eee;
             display: none;
-            pointer-events: none;
+            pointer-events: auto;
+            cursor: default;
         }
         .order-items-details.visible {
             display: block;
@@ -810,83 +813,98 @@
 
         async function showMyOrders() {
             myOrdersModalOpen = true;
-            document.getElementById('my-orders-modal').classList.add('visible');
-            document.getElementById('orders-list').innerHTML = '<p style="text-align: center; color: #999;">Loading orders...</p>';
-            
-            const orders = await checkOrderStatus();
+            const modal = document.getElementById('my-orders-modal');
             const ordersList = document.getElementById('orders-list');
-            ordersList.innerHTML = '';
             
-            if (orders.length === 0) {
-                ordersList.innerHTML = '<p style="text-align: center; color: #999; padding: 40px 20px;">No orders yet</p>';
-                return;
+            // Show modal with loading state
+            modal.classList.add('visible');
+            ordersList.innerHTML = '<div style="text-align: center; padding: 60px 20px;"><div style="font-size: 3em; margin-bottom: 15px;">⏳</div><p style="color: #999; font-size: 1em;">Loading your orders...</p></div>';
+            
+            try {
+                // Wait for the API call to complete
+                const orders = await checkOrderStatus();
+                
+                // Clear the loading state
+                ordersList.innerHTML = '';
+                
+                // Check if we actually got orders
+                if (!orders || orders.length === 0) {
+                    ordersList.innerHTML = '<div style="text-align: center; padding: 60px 20px;"><div style="font-size: 3em; margin-bottom: 15px;">📋</div><p style="color: #999; font-size: 1em;">No orders yet</p><p style="color: #999; font-size: 0.85em; margin-top: 10px;">Your order history will appear here</p></div>';
+                    return;
+                }
+                
+                // Render all orders
+                orders.forEach(order => {
+                    const orderCard = document.createElement('div');
+                    orderCard.className = 'order-status-card';
+                    orderCard.dataset.orderId = order.orderId;
+                    orderCard.style.cursor = 'pointer';
+                    orderCard.setAttribute('onclick', `console.log('Inline click works for ${order.orderId}')`);
+                    
+                    const statusClass = order.status.toLowerCase();
+                    const statusEmoji = {
+                        'pending': '⏳',
+                        'preparing': '👨‍🍳',
+                        'ready': '✅',
+                        'delivered': '📦'
+                    }[statusClass] || '📋';
+                    
+                    const formattedDate = new Date(order.timestamp).toLocaleString('en-IN', {
+                        day: 'numeric',
+                        month: 'short',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                    });
+                    
+                    orderCard.innerHTML = `
+                        <div class="order-status-header" style="pointer-events: auto;">
+                            <div class="order-id">${order.orderId}</div>
+                            <div class="order-status ${statusClass}">${statusEmoji} ${order.status}</div>
+                        </div>
+                        <div class="order-details" style="pointer-events: auto;">
+                            <div>Date: ${formattedDate}</div>
+                            ${order.tableNumber ? `<div>Table: ${order.tableNumber}</div>` : ''}
+                            <div class="order-total">Total: ₹${order.grandTotal.toFixed(2)}</div>
+                            <div style="margin-top: 8px; font-size: 0.85em; color: var(--primary-color); font-weight: 600;">👆 Tap to view details ▼</div>
+                        </div>
+                        <div class="order-items-details" id="details-${order.orderId}" style="pointer-events: none;">
+                            <div style="text-align: center; color: #999; padding: 10px;">Tap above to load details</div>
+                        </div>
+                    `;
+                    
+                    // Add click handler only to header and details section, not the expanded area
+                    const headerSection = orderCard.querySelector('.order-status-header');
+                    const detailsSection = orderCard.querySelector('.order-details');
+                    
+                    const clickHandler = function(e) {
+                        e.stopPropagation();
+                        console.log('Order clicked:', order.orderId);
+                        toggleOrderDetails(order.orderId);
+                    };
+                    
+                    headerSection.onclick = clickHandler;
+                    detailsSection.onclick = clickHandler;
+                    headerSection.addEventListener('touchend', (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        toggleOrderDetails(order.orderId);
+                    });
+                    detailsSection.addEventListener('touchend', (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        toggleOrderDetails(order.orderId);
+                    });
+                    
+                    ordersList.appendChild(orderCard);
+                });
+                
+                console.log(`✓ Displayed ${orders.length} orders`);
+                
+            } catch (error) {
+                console.error('Error loading orders:', error);
+                ordersList.innerHTML = '<div style="text-align: center; padding: 60px 20px;"><div style="font-size: 3em; margin-bottom: 15px;">⚠️</div><p style="color: #d9534f; font-size: 1em;">Error loading orders</p><p style="color: #999; font-size: 0.85em; margin-top: 10px;">Please try again</p></div>';
             }
-            
-            orders.forEach(order => {
-                const orderCard = document.createElement('div');
-                orderCard.className = 'order-status-card';
-                orderCard.dataset.orderId = order.orderId;
-                orderCard.style.cursor = 'pointer';
-                orderCard.setAttribute('onclick', `console.log('Inline click works for ${order.orderId}')`);
-                
-                const statusClass = order.status.toLowerCase();
-                const statusEmoji = {
-                    'pending': '⏳',
-                    'preparing': '👨‍🍳',
-                    'ready': '✅',
-                    'delivered': '📦'
-                }[statusClass] || '📋';
-                
-                const formattedDate = new Date(order.timestamp).toLocaleString('en-IN', {
-                    day: 'numeric',
-                    month: 'short',
-                    year: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                });
-                
-                orderCard.innerHTML = `
-                    <div class="order-status-header" style="pointer-events: auto;">
-                        <div class="order-id">${order.orderId}</div>
-                        <div class="order-status ${statusClass}">${statusEmoji} ${order.status}</div>
-                    </div>
-                    <div class="order-details" style="pointer-events: auto;">
-                        <div>Date: ${formattedDate}</div>
-                        ${order.tableNumber ? `<div>Table: ${order.tableNumber}</div>` : ''}
-                        <div class="order-total">Total: ₹${order.grandTotal.toFixed(2)}</div>
-                        <div style="margin-top: 8px; font-size: 0.85em; color: var(--primary-color); font-weight: 600;">👆 Tap to view details ▼</div>
-                    </div>
-                    <div class="order-items-details" id="details-${order.orderId}" style="pointer-events: none;">
-                        <div style="text-align: center; color: #999; padding: 10px;">Tap above to load details</div>
-                    </div>
-                `;
-                
-                // Add click handler only to header and details section, not the expanded area
-                const clickableArea = orderCard.querySelector('.order-status-header, .order-details');
-                const headerSection = orderCard.querySelector('.order-status-header');
-                const detailsSection = orderCard.querySelector('.order-details');
-                
-                const clickHandler = function(e) {
-                    e.stopPropagation();
-                    console.log('Order clicked:', order.orderId);
-                    toggleOrderDetails(order.orderId);
-                };
-                
-                headerSection.onclick = clickHandler;
-                detailsSection.onclick = clickHandler;
-                headerSection.addEventListener('touchend', (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    toggleOrderDetails(order.orderId);
-                });
-                detailsSection.addEventListener('touchend', (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    toggleOrderDetails(order.orderId);
-                });
-                
-                ordersList.appendChild(orderCard);
-            });
         }
         
         async function toggleOrderDetails(orderId) {
