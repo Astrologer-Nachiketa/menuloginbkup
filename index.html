@@ -576,7 +576,7 @@
     <script>
     document.addEventListener('DOMContentLoaded', () => {
         // ⚠️ IMPORTANT: Replace with your Apps Script Web App URL
-        const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyJ0feGSsGQg93-yvuXJLwj184Cd0efF19W9iRPdK_DzL1k6wZje3Ds1PGmVXFCELpj/exec';
+        const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzuxKmKEKaLnNPf72XWYOd850QI2biDk2Z8KyDo5mhVvhYow3uMOhaaEuTCWFUYAPsq/exec';
         
         let GST_RATE = 0.05;
         let deviceId = null;
@@ -1181,6 +1181,23 @@
             placeOrderBtn.disabled = true;
             placeOrderBtn.textContent = 'Submitting Order...';
             
+            // Check outlet status and location before submitting
+            const statusCheck = checkOutletStatus();
+            if (!statusCheck.open) {
+                alert(`⚠️ Cannot place order\n\n${statusCheck.reason}`);
+                placeOrderBtn.disabled = false;
+                placeOrderBtn.textContent = 'Place Order';
+                return;
+            }
+            
+            const locationCheck = await checkUserLocation();
+            if (!locationCheck.allowed) {
+                alert(`⚠️ Cannot place order\n\n${locationCheck.reason}`);
+                placeOrderBtn.disabled = false;
+                placeOrderBtn.textContent = 'Place Order';
+                return;
+            }
+            
             try {
                 const { subtotal, discount, gst, grandTotal } = calculateTotals();
                 const generalInstructions = document.getElementById('general-instructions').value.trim();
@@ -1489,6 +1506,161 @@
                       Math.sin(dLon/2) * Math.sin(dLon/2);
             const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
             return R * c;
+        }
+
+        function checkOutletStatus() {
+            if (!config['on time'] || !config['off time']) {
+                console.log('No time configuration found, outlet open by default');
+                return { open: true };
+            }
+            
+            const now = new Date();
+            const currentTime = now.getHours() * 60 + now.getMinutes();
+            const currentDay = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'][now.getDay()];
+            const currentDate = `${String(now.getDate()).padStart(2, '0')}-${String(now.getMonth() + 1).padStart(2, '0')}-${now.getFullYear()}`;
+            const currentDateSlash = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
+            
+            console.log('Checking outlet status...');
+            console.log('Current time (minutes):', currentTime);
+            console.log('Current day:', currentDay);
+            
+            // Parse opening time
+            const onTimeParts = config['on time'].split(':');
+            const onHour = parseInt(onTimeParts[0]);
+            const onMin = onTimeParts[1] ? parseInt(onTimeParts[1]) : 0;
+            const onTime = onHour * 60 + onMin;
+            
+            // Parse closing time
+            const offTimeParts = config['off time'].split(':');
+            const offHour = parseInt(offTimeParts[0]);
+            const offMin = offTimeParts[1] ? parseInt(offTimeParts[1]) : 0;
+            const offTime = offHour * 60 + offMin;
+            
+            // Check time
+            if (currentTime < onTime || currentTime > offTime) {
+                return { 
+                    open: false, 
+                    reason: `We're open from ${config['on time']} to ${config['off time']}` 
+                };
+            }
+            
+            // Check off days
+            if (config['off days']) {
+                const offDays = config['off days'].toLowerCase().split(',').map(d => d.trim());
+                if (offDays.includes(currentDay)) {
+                    return { open: false, reason: `We're closed on ${currentDay.charAt(0).toUpperCase() + currentDay.slice(1)}days` };
+                }
+            }
+            
+            // Check holidays
+            if (config['holidays']) {
+                const holidays = config['holidays'].split(',').map(d => d.trim());
+                if (holidays.includes(currentDate) || holidays.includes(currentDateSlash)) {
+                    return { open: false, reason: "We're closed for the holiday today" };
+                }
+            }
+            
+            console.log('✓ Outlet is open');
+            return { open: true };
+        }
+
+        async function checkUserLocation() {
+            // Check if GPS verification is enabled
+            if (config['gps check'] && config['gps check'].toLowerCase() === 'no') {
+                console.log("GPS check disabled in config, skipping location verification");
+                return { allowed: true };
+            }
+            
+            if (!config.outletLocation || !config.deliveryRadius) {
+                console.log("No location config, skipping location check");
+                return { allowed: true };
+            }
+            
+            return new Promise((resolve) => {
+                if (!navigator.geolocation) {
+                    console.log("Geolocation not supported");
+                    resolve({ allowed: true });
+                    return;
+                }
+                
+                console.log("Requesting user location...");
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        userLocation = {
+                            lat: position.coords.latitude,
+                            lng: position.coords.longitude
+                        };
+                        
+                        console.log("User location:", userLocation);
+                        console.log("Outlet location:", config.outletLocation);
+                        
+                        const distance = calculateDistance(
+                            userLocation.lat,
+                            userLocation.lng,
+                            config.outletLocation.lat,
+                            config.outletLocation.lng
+                        );
+                        
+                        console.log("Distance:", distance.toFixed(2), "km");
+                        console.log("Delivery radius:", config.deliveryRadius, "km");
+                        
+                        if (distance > config.deliveryRadius) {
+                            resolve({ 
+                                allowed: false, 
+                                reason: `You are ${distance.toFixed(1)}km away. We deliver within ${config.deliveryRadius}km.` 
+                            });
+                        } else {
+                            resolve({ allowed: true });
+                        }
+                    },
+                    (error) => {
+                        console.log('Location access denied or unavailable:', error);
+                        if (config['gps check'] && config['gps check'].toLowerCase() === 'yes') {
+                            resolve({ 
+                                allowed: false, 
+                                reason: 'Location permission required. Please enable location access and refresh the page.' 
+                            });
+                        } else {
+                            resolve({ allowed: true });
+                        }
+                    },
+                    {
+                        enableHighAccuracy: true,
+                        timeout: 10000,
+                        maximumAge: 0
+                    }
+                );
+            });
+        }
+
+        function showClosedOverlay(reason) {
+            const overlay = document.createElement('div');
+            overlay.id = 'closed-overlay';
+            overlay.style.cssText = `
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                background: rgba(0, 0, 0, 0.9);
+                z-index: 9999;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                align-items: center;
+                color: white;
+                text-align: center;
+                padding: 30px;
+                border-radius: 50%;
+                width: 200px;
+                height: 200px;
+                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+                pointer-events: none;
+            `;
+            overlay.innerHTML = `
+                <div style="font-size: 3em; margin-bottom: 10px;">🔒</div>
+                <div style="font-size: 0.9em; font-weight: 600; line-height: 1.3;">${reason}</div>
+            `;
+            document.body.appendChild(overlay);
         }
 
         function calculateTotals() {
@@ -1949,6 +2121,26 @@
             console.log('Loading configuration...');
             config = await fetchConfig();
             console.log('✓ Config loaded');
+            
+            // Check outlet status but don't block UI
+            const statusCheck = checkOutletStatus();
+            console.log("Status check result:", statusCheck);
+            
+            if (!statusCheck.open) {
+                outletOpen = false;
+                outletClosedReason = statusCheck.reason;
+                showClosedOverlay(statusCheck.reason);
+            }
+            
+            // Check user location but don't block UI
+            const locationCheck = await checkUserLocation();
+            console.log("Location check result:", locationCheck);
+            
+            if (!locationCheck.allowed) {
+                outletOpen = false;
+                outletClosedReason = locationCheck.reason;
+                showClosedOverlay(locationCheck.reason);
+            }
             
             console.log('Loading discount codes...');
             discountCodes = await fetchDiscountCodes();
