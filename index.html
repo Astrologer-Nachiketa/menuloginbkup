@@ -846,36 +846,42 @@
                 });
                 
                 orderCard.innerHTML = `
-                    <div class="order-status-header">
+                    <div class="order-status-header" style="pointer-events: auto;">
                         <div class="order-id">${order.orderId}</div>
                         <div class="order-status ${statusClass}">${statusEmoji} ${order.status}</div>
                     </div>
-                    <div class="order-details">
+                    <div class="order-details" style="pointer-events: auto;">
                         <div>Date: ${formattedDate}</div>
                         ${order.tableNumber ? `<div>Table: ${order.tableNumber}</div>` : ''}
                         <div class="order-total">Total: ₹${order.grandTotal.toFixed(2)}</div>
                         <div style="margin-top: 8px; font-size: 0.85em; color: var(--primary-color); font-weight: 600;">👆 Tap to view details ▼</div>
                     </div>
-                    <div class="order-items-details" id="details-${order.orderId}">
+                    <div class="order-items-details" id="details-${order.orderId}" style="pointer-events: none;">
                         <div style="text-align: center; color: #999; padding: 10px;">Tap above to load details</div>
                     </div>
                 `;
                 
-                // Add click handler to toggle details - Multiple methods for debugging
-                orderCard.onclick = function() {
-                    console.log('Card onclick fired for:', order.orderId);
+                // Add click handler only to header and details section, not the expanded area
+                const clickableArea = orderCard.querySelector('.order-status-header, .order-details');
+                const headerSection = orderCard.querySelector('.order-status-header');
+                const detailsSection = orderCard.querySelector('.order-details');
+                
+                const clickHandler = function(e) {
+                    e.stopPropagation();
+                    console.log('Order clicked:', order.orderId);
                     toggleOrderDetails(order.orderId);
                 };
                 
-                orderCard.addEventListener('click', (e) => {
-                    console.log('addEventListener fired for:', order.orderId);
+                headerSection.onclick = clickHandler;
+                detailsSection.onclick = clickHandler;
+                headerSection.addEventListener('touchend', (e) => {
+                    e.preventDefault();
                     e.stopPropagation();
                     toggleOrderDetails(order.orderId);
                 });
-                
-                orderCard.addEventListener('touchend', (e) => {
-                    console.log('Touch event fired for:', order.orderId);
+                detailsSection.addEventListener('touchend', (e) => {
                     e.preventDefault();
+                    e.stopPropagation();
                     toggleOrderDetails(order.orderId);
                 });
                 
