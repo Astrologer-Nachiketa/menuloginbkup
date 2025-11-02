@@ -1,4 +1,5 @@
 //https://script.google.com/macros/s/AKfycbyJ0feGSsGQg93-yvuXJLwj184Cd0efF19W9iRPdK_DzL1k6wZje3Ds1PGmVXFCELpj/exec
+//https://script.google.com/macros/s/AKfycbzuxKmKEKaLnNPf72XWYOd850QI2biDk2Z8KyDo5mhVvhYow3uMOhaaEuTCWFUYAPsq/exec
 // Replace with your sheet ID
 const SHEET_ID = '1Js6OE6o4YZ6iVtWCqkWNNqlJwkIt0R5Q-zeWno_-Z6o'; 
 // Google Apps Script - Order Management Backend
@@ -142,6 +143,10 @@ function getOrderDetails(orderId) {
  * Retrieves the last 50 orders for the staff dashboard.
  * @return {GoogleAppsScript.Content.TextOutput} JSON response with the list of orders.
  */
+/**
+ * Retrieves the last 50 orders for the staff dashboard.
+ * @return {GoogleAppsScript.Content.TextOutput} JSON response with the list of orders.
+ */
 function getRecentOrders() {
   const ordersSheet = ss.getSheetByName('Orders');
   if (!ordersSheet) {
@@ -150,8 +155,10 @@ function getRecentOrders() {
 
   const lastRow = ordersSheet.getLastRow();
   // Fetch header row and up to the last 50 rows (plus header)
+  // CRITICAL: Ensure we fetch up to column S (the 19th column) for the new timestamps.
+  const lastColumn = ordersSheet.getLastColumn();
   const rowsToFetch = Math.min(lastRow, 51);
-  const dataRange = ordersSheet.getRange(1, 1, rowsToFetch, ordersSheet.getLastColumn());
+  const dataRange = ordersSheet.getRange(1, 1, rowsToFetch, lastColumn); // Use lastColumn dynamically
   const data = dataRange.getValues();
   
   const orders = [];
@@ -174,6 +181,10 @@ function getRecentOrders() {
       status: row[12],
       timestamp: row[13],
       // [14] Location_Lat, [15] Location_Lng, [16] Distance_KM
+      
+      // NEW FIELDS ADDED HERE (Index 17 = Column R, Index 18 = Column S)
+      readyTimestamp: row[17] || null, 
+      deliveredTimestamp: row[18] || null
     });
   }
   
