@@ -194,6 +194,143 @@
             font-size: clamp(0.95em, 3.5vw, 1em);
             margin-bottom: 5px;
         }
+        .info-icon {
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            font-size: 0.75em;
+            font-weight: 700;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-left: 8px;
+            flex-shrink: 0;
+            -webkit-tap-highlight-color: transparent;
+            transition: transform 0.2s;
+        }
+        
+        .info-icon:active {
+            transform: scale(0.9);
+        }
+        
+        .description-modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            z-index: 240;
+            display: none;
+        }
+        
+        .description-modal-overlay.visible {
+            display: block;
+        }
+        
+        .description-modal {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            border-radius: 16px;
+            padding: 0;
+            max-width: 95%;
+            width: 95%;
+            max-height: 85vh;
+            overflow: hidden;
+            z-index: 250;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+            animation: fadeIn 0.2s ease-out;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translate(-50%, -48%);
+            }
+            to {
+                opacity: 1;
+                transform: translate(-50%, -50%);
+            }
+        }
+        
+        .description-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            border-bottom: 2px solid #eee;
+            flex-shrink: 0;
+            background: white;
+            z-index: 300;
+            position: relative;
+        }
+        
+        .description-title {
+            font-size: 1.1em;
+            font-weight: 700;
+            color: var(--primary-color);
+        }
+        
+        .description-close {
+            background: #f44336;
+            border: none;
+            font-size: 1.5em;
+            color: white;
+            cursor: pointer;
+            min-width: 40px;
+            min-height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            z-index: 300;
+            position: relative;
+            transition: all 0.2s;
+        }
+        
+        .description-close:active {
+            transform: scale(0.9);
+            background: #d32f2f;
+        }
+        
+        .description-close:hover {
+            background: #d32f2f;
+        }
+        
+        .description-content {
+            color: #333;
+            line-height: 1.6;
+            font-size: 0.95em;
+            overflow-y: auto;
+            flex-grow: 1;
+            padding: 0;
+        }
+        
+        .description-content img {
+            width: 100%;
+            display: block;
+            margin: 0;
+        }
+        
+        .description-content p {
+            padding: 20px;
+            margin: 0;
+        }
+        
+        .description-content > div {
+            margin: 0;
+        }
+        
         .attribute-icon {
             width: 14px;
             height: 14px;
@@ -574,12 +711,23 @@
                 </div>
             </div>
         </div>
+        
+        <!-- Description Modal for Item Info -->
+        <div class="description-modal-overlay" id="description-modal-overlay">
+            <div class="description-modal" id="description-modal">
+                <div class="description-header">
+                    <div class="description-title" id="description-title"></div>
+                    <button class="description-close" id="description-close">&times;</button>
+                </div>
+                <div class="description-content" id="description-content"></div>
+            </div>
+        </div>
     </div>
 
     <script>
     document.addEventListener('DOMContentLoaded', () => {
         // ⚠️ IMPORTANT: Replace with your Apps Script Web App URL
-        const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzuxKmKEKaLnNPf72XWYOd850QI2biDk2Z8KyDo5mhVvhYow3uMOhaaEuTCWFUYAPsq/exec';
+        const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby-gkdoABjYZBqi17HMBk8RUqnmRhXiGk48jMhOZEtfd93VhU5RNJKDEiVN4dC8jUMWbg/exec';
         
         let GST_RATE = 0.05;
         let deviceId = null;
@@ -816,20 +964,48 @@
             const modal = document.getElementById('my-orders-modal');
             const ordersList = document.getElementById('orders-list');
             
-            // Show modal with loading state
+            // Show modal with loading state immediately
             modal.classList.add('visible');
-            ordersList.innerHTML = '<div style="text-align: center; padding: 60px 20px;"><div style="font-size: 3em; margin-bottom: 15px;">⏳</div><p style="color: #999; font-size: 1em;">Loading your orders...</p></div>';
+            ordersList.innerHTML = '<div style="text-align: center; padding: 60px 20px;"><div style="font-size: 3em; margin-bottom: 15px; animation: spin 1s linear infinite;">⏳</div><p style="color: #999; font-size: 1em; font-weight: 600;">Loading your orders...</p><p style="color: #999; font-size: 0.85em; margin-top: 10px;">Please wait</p></div>';
+            
+            // Add spinner animation
+            const style = document.createElement('style');
+            style.textContent = '@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }';
+            if (!document.querySelector('#spinner-style')) {
+                style.id = 'spinner-style';
+                document.head.appendChild(style);
+            }
             
             try {
-                // Wait for the API call to complete
-                const orders = await checkOrderStatus();
+                // Force a fresh API call - don't use cached data
+                console.log('🔄 Fetching fresh orders for My Orders modal...');
+                
+                // Simple fetch without custom headers to avoid CORS preflight
+                const response = await fetch(`${APPS_SCRIPT_URL}?action=checkOrderStatus&deviceId=${deviceId}&_=${Date.now()}`);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                console.log('Fresh order status response:', data);
+                
+                if (data.status !== 'success') {
+                    throw new Error(data.message || 'Failed to fetch orders');
+                }
+                
+                const orders = data.orders || [];
+                console.log(`✓ Received ${orders.length} fresh orders`);
+                
+                // Update badge with fresh data
+                updateOrdersBadge(orders);
                 
                 // Clear the loading state
                 ordersList.innerHTML = '';
                 
                 // Check if we actually got orders
-                if (!orders || orders.length === 0) {
-                    ordersList.innerHTML = '<div style="text-align: center; padding: 60px 20px;"><div style="font-size: 3em; margin-bottom: 15px;">📋</div><p style="color: #999; font-size: 1em;">No orders yet</p><p style="color: #999; font-size: 0.85em; margin-top: 10px;">Your order history will appear here</p></div>';
+                if (orders.length === 0) {
+                    ordersList.innerHTML = '<div style="text-align: center; padding: 60px 20px;"><div style="font-size: 3em; margin-bottom: 15px;">📋</div><p style="color: #999; font-size: 1em; font-weight: 600;">No orders yet</p><p style="color: #999; font-size: 0.85em; margin-top: 10px;">Your order history will appear here</p></div>';
                     return;
                 }
                 
@@ -839,7 +1015,6 @@
                     orderCard.className = 'order-status-card';
                     orderCard.dataset.orderId = order.orderId;
                     orderCard.style.cursor = 'pointer';
-                    orderCard.setAttribute('onclick', `console.log('Inline click works for ${order.orderId}')`);
                     
                     const statusClass = order.status.toLowerCase();
                     const statusEmoji = {
@@ -873,13 +1048,12 @@
                         </div>
                     `;
                     
-                    // Add click handler only to header and details section, not the expanded area
+                    // Add click handler only to header and details section
                     const headerSection = orderCard.querySelector('.order-status-header');
                     const detailsSection = orderCard.querySelector('.order-details');
                     
                     const clickHandler = function(e) {
                         e.stopPropagation();
-                        console.log('Order clicked:', order.orderId);
                         toggleOrderDetails(order.orderId);
                     };
                     
@@ -899,11 +1073,11 @@
                     ordersList.appendChild(orderCard);
                 });
                 
-                console.log(`✓ Displayed ${orders.length} orders`);
+                console.log(`✓ Successfully displayed ${orders.length} orders`);
                 
             } catch (error) {
                 console.error('Error loading orders:', error);
-                ordersList.innerHTML = '<div style="text-align: center; padding: 60px 20px;"><div style="font-size: 3em; margin-bottom: 15px;">⚠️</div><p style="color: #d9534f; font-size: 1em;">Error loading orders</p><p style="color: #999; font-size: 0.85em; margin-top: 10px;">Please try again</p></div>';
+                ordersList.innerHTML = '<div style="text-align: center; padding: 60px 20px;"><div style="font-size: 3em; margin-bottom: 15px;">⚠️</div><p style="color: #d9534f; font-size: 1em; font-weight: 600;">Error loading orders</p><p style="color: #999; font-size: 0.85em; margin-top: 10px;">Please try again</p><button onclick="location.reload()" style="margin-top: 20px; padding: 12px 24px; background: var(--primary-color); color: white; border: none; border-radius: 25px; font-weight: 600; cursor: pointer;">Refresh Page</button></div>';
             }
         }
         
@@ -1190,6 +1364,40 @@
                     </div>
                 `;
             }
+            
+            // Add table order notice if applicable
+            if (tableNumber) {
+                let tableNotice = document.getElementById('table-order-notice');
+                if (!tableNotice) {
+                    tableNotice = document.createElement('div');
+                    tableNotice.id = 'table-order-notice';
+                    tableNotice.style.cssText = `
+                        background: linear-gradient(135deg, #fff3cd 0%, #ffe69c 100%);
+                        padding: 15px;
+                        border-radius: 8px;
+                        margin-bottom: 15px;
+                        font-size: 0.9em;
+                        border-left: 4px solid #ffc107;
+                    `;
+                    const placeOrderBtn = document.getElementById('place-order-btn');
+                    const customerSummary = document.getElementById('customer-details-summary');
+                    if (customerSummary) {
+                        customerSummary.parentElement.insertBefore(tableNotice, customerSummary);
+                    } else {
+                        placeOrderBtn.parentElement.insertBefore(tableNotice, placeOrderBtn);
+                    }
+                }
+                
+                tableNotice.innerHTML = `
+                    <div style="font-weight: 600; margin-bottom: 8px; color: #856404; display: flex; align-items: center; gap: 8px;">
+                        <span>🍽️</span> Table Order - Running Bill
+                    </div>
+                    <div style="color: #856404; line-height: 1.6; font-size: 0.95em;">
+                        <div><strong>Table ${tableNumber}</strong></div>
+                        <div style="margin-top: 5px;">Items will be added to your existing order until marked as "Delivered"</div>
+                    </div>
+                `;
+            }
         }
 
         document.getElementById('place-order-btn').addEventListener('click', () => {
@@ -1423,6 +1631,40 @@
             if (e.target === document.getElementById('my-orders-modal')) {
                 myOrdersModalOpen = false;
                 document.getElementById('my-orders-modal').classList.remove('visible');
+            }
+        });
+        
+        // Description modal handlers
+        const descriptionCloseBtn = document.getElementById('description-close');
+        const descriptionOverlay = document.getElementById('description-modal-overlay');
+        
+        // Multiple event listeners for better reliability
+        descriptionCloseBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('Close button clicked');
+            closeDescriptionModal();
+        });
+        
+        descriptionCloseBtn.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('Close button touched');
+            closeDescriptionModal();
+        });
+        
+        descriptionOverlay.addEventListener('click', (e) => {
+            if (e.target === descriptionOverlay) {
+                console.log('Overlay clicked');
+                closeDescriptionModal();
+            }
+        });
+        
+        descriptionOverlay.addEventListener('touchend', (e) => {
+            if (e.target === descriptionOverlay) {
+                e.preventDefault();
+                console.log('Overlay touched');
+                closeDescriptionModal();
             }
         });
 
@@ -1744,7 +1986,16 @@
             const table = params.get('table');
             if (table && table.trim() !== '') {
                 tableNumber = table.trim();
-                document.getElementById('table-number-display').textContent = `- Table ${tableNumber}`;
+                const displayText = `- Table ${tableNumber}`;
+                document.getElementById('table-number-display').textContent = displayText;
+                console.log('✓ Table number from URL:', tableNumber);
+                
+                // Show table order indicator in header
+                const header = document.querySelector('.header h1');
+                header.style.background = 'linear-gradient(135deg, #d9534f 0%, #c9302c 100%)';
+                header.style.webkitBackgroundClip = 'text';
+                header.style.webkitTextFillColor = 'transparent';
+                header.style.backgroundClip = 'text';
             }
         }
 
@@ -1823,12 +2074,17 @@
                 } else {
                     actionHtml = `<button class="add-button" data-item-name="${item.Name}">ADD</button>`;
                 }
+                
+                // Check if item has description
+                const hasDescription = item.description && item.description.trim() !== '';
+                const infoIconHtml = hasDescription ? `<button class="info-icon" data-item-name="${item.Name}" title="View description">i</button>` : '';
 
                 itemCard.innerHTML = `
                     <div class="item-details">
                         <div class="item-name">
                             <div class="attribute-icon ${getAttributeClass(item.Attributes)}"></div>
                             <span style="flex: 1;">${item.Name}</span>
+                            ${infoIconHtml}
                         </div>
                         <div class="item-price">₹${item.Price}</div>
                     </div>
@@ -1837,6 +2093,7 @@
                 itemListMain.appendChild(itemCard);
             });
             
+            // Add click handlers for ADD buttons
             itemListMain.querySelectorAll('.add-button').forEach(btn => {
                 btn.addEventListener('click', (e) => {
                     const itemName = e.target.dataset.itemName;
@@ -1853,7 +2110,20 @@
                     }
                 });
             });
+            
+            // Add click handlers for info buttons
+            itemListMain.querySelectorAll('.info-icon').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const itemName = e.target.dataset.itemName;
+                    const item = menuItems.find(i => i.Name === itemName);
+                    if (item) {
+                        showDescription(item);
+                    }
+                });
+            });
 
+            // Add click handlers for quantity controls
             itemListMain.querySelectorAll('.decrease-item-qty, .increase-item-qty').forEach(btn => {
                 btn.addEventListener('click', (e) => {
                     const isIncrease = e.target.classList.contains('increase-item-qty');
@@ -1879,6 +2149,108 @@
                     }
                 });
             });
+        }
+        
+        function isImageUrl(text) {
+            if (!text) return false;
+            text = text.trim();
+            const urlPattern = /^https?:\/\//i;
+            return urlPattern.test(text);
+        }
+
+        function getYouTubeEmbedUrl(url) {
+            let videoId = null;
+            
+            // Check for YouTube Shorts
+            const shortsRegExp = /youtube\.com\/shorts\/([^#&?]*)/;
+            const shortsMatch = url.match(shortsRegExp);
+            if (shortsMatch && shortsMatch[1]) {
+                videoId = shortsMatch[1];
+            }
+            
+            // Check for regular YouTube URLs
+            if (!videoId) {
+                const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+                const match = url.match(regExp);
+                if (match && match[2] && match[2].length === 11) {
+                    videoId = match[2];
+                }
+            }
+            
+            if (videoId) {
+                return `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0`;
+            }
+            
+            return null;
+        }
+
+        function showDescription(item) {
+            if (!item.description || item.description.trim() === '') return;
+            
+            const descriptionTitle = document.getElementById('description-title');
+            const descriptionContent = document.getElementById('description-content');
+            const descriptionModalOverlay = document.getElementById('description-modal-overlay');
+            
+            descriptionTitle.textContent = item.Name;
+            
+            const desc = item.description.trim();
+            console.log('Showing description for:', item.Name);
+            console.log('Description value:', desc);
+            
+            if (isImageUrl(desc)) {
+                const youtubeEmbedUrl = getYouTubeEmbedUrl(desc);
+                
+                if (youtubeEmbedUrl) {
+                    console.log('YouTube embed URL:', youtubeEmbedUrl);
+                    descriptionContent.innerHTML = `
+                        <div style="position: relative; width: 100%; padding-bottom: 56.25%; height: 0; overflow: hidden; background: #000;">
+                            <iframe src="${youtubeEmbedUrl}" 
+                                    style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none;"
+                                    frameborder="0"
+                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                    allowfullscreen>
+                            </iframe>
+                        </div>
+                    `;
+                } else {
+                    const contentId = 'desc-content-' + Date.now();
+                    descriptionContent.innerHTML = `
+                        <img src="${desc}" 
+                             alt="${item.Name}" 
+                             id="${contentId}-img"
+                             style="width: 100%; display: block; margin: 0;" 
+                             onload="console.log('Image loaded successfully')"
+                             onerror="console.log('Image failed, trying iframe'); document.getElementById('${contentId}-img').style.display='none'; document.getElementById('${contentId}-iframe').style.display='block';">
+                        <iframe src="${desc}" 
+                                id="${contentId}-iframe"
+                                style="width: 100%; height: 70vh; border: none; display: none;"
+                                onload="console.log('Iframe loaded successfully')"
+                                onerror="console.log('Iframe failed, showing link'); document.getElementById('${contentId}-iframe').style.display='none'; document.getElementById('${contentId}-fallback').style.display='block';">
+                        </iframe>
+                        <div id="${contentId}-fallback" style="display: none; padding: 30px 20px; background: #f5f5f5; text-align: center;">
+                            <p style="margin-bottom: 20px; color: #666; font-size: 1em;">Content cannot be displayed in preview</p>
+                            <a href="${desc}" target="_blank" 
+                               style="display: inline-block; background: var(--primary-color); color: white; padding: 14px 28px; border-radius: 25px; text-decoration: none; font-weight: 600; font-size: 1em;">
+                                Open Link in New Tab →
+                            </a>
+                        </div>
+                    `;
+                }
+            } else {
+                descriptionContent.innerHTML = `<p style="line-height: 1.8; padding: 20px;">${desc}</p>`;
+            }
+            
+            descriptionModalOverlay.classList.add('visible');
+        }
+
+        function closeDescriptionModal() {
+            const descriptionModalOverlay = document.getElementById('description-modal-overlay');
+            const descriptionContent = document.getElementById('description-content');
+            descriptionModalOverlay.classList.remove('visible');
+            // Stop any playing videos by clearing content
+            setTimeout(() => {
+                descriptionContent.innerHTML = '';
+            }, 300);
         }
         
         function openCustomizationModal(item, cartIndex = null) {
