@@ -727,7 +727,7 @@
     <script>
     document.addEventListener('DOMContentLoaded', () => {
         // ⚠️ IMPORTANT: Replace with your Apps Script Web App URL
-        const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby-gkdoABjYZBqi17HMBk8RUqnmRhXiGk48jMhOZEtfd93VhU5RNJKDEiVN4dC8jUMWbg/exec';
+        const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyOAnzEp-93d5xVWi6BNYqYDd4s4PBfxUiLEvCPfDqPJvoabu8gC7si0r-XoKTFTtiY/exec';
         
         let GST_RATE = 0.05;
         let deviceId = null;
@@ -1464,17 +1464,18 @@
                 formData.append('customerAddress', customerDetails.address);
                 formData.append('tableNumber', tableNumber || '');
                 formData.append('orderItems', JSON.stringify(orderItems));
-                formData.append('subtotal', subtotal);
-                formData.append('discount', discount);
-                formData.append('gst', gst);
-                formData.append('grandTotal', grandTotal);
+                formData.append('subtotal', subtotal.toString());
+                formData.append('discount', discount.toString());
+                formData.append('gst', gst.toString());
+                formData.append('grandTotal', grandTotal.toString());
                 formData.append('generalInstructions', generalInstructions);
-                formData.append('locationLat', userLocation ? userLocation.lat : '');
-                formData.append('locationLng', userLocation ? userLocation.lng : '');
+                formData.append('locationLat', userLocation ? userLocation.lat.toString() : '');
+                formData.append('locationLng', userLocation ? userLocation.lng.toString() : '');
                 formData.append('distanceKm', userLocation && config.outletLocation ? 
                     calculateDistance(userLocation.lat, userLocation.lng, config.outletLocation.lat, config.outletLocation.lng).toFixed(2) : '');
                 
                 console.log('Submitting order via form data...');
+                console.log('Form data entries:', Array.from(formData.entries()));
                 
                 // CORS-safe POST request - do NOT set Content-Type header
                 const response = await fetch(APPS_SCRIPT_URL, {
