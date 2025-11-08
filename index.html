@@ -1481,10 +1481,22 @@
                 const response = await fetch(APPS_SCRIPT_URL, {
                     method: 'POST',
                     body: formData
-                    // Browser automatically sets Content-Type: application/x-www-form-urlencoded
                 });
                 
-                const result = await response.json();
+                console.log('Response status:', response.status);
+                console.log('Response headers:', response.headers);
+                
+                const responseText = await response.text();
+                console.log('Raw response text:', responseText);
+                
+                let result;
+                try {
+                    result = JSON.parse(responseText);
+                } catch (e) {
+                    console.error('Failed to parse response as JSON:', e);
+                    throw new Error('Invalid response from server: ' + responseText.substring(0, 100));
+                }
+                
                 console.log('Order submission result:', result);
                 
                 if (result.status === 'success') {
